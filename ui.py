@@ -951,7 +951,12 @@ def quick_action_pills_html() -> str:
 
 
 def divider_html() -> str:
-    return '<div class="ds-divider" role="separator"></div>'
+    """Return a gradient divider using inline styles (avoids Streamlit markdown parsing issues)."""
+    return (
+        '<div style="height:2px;'
+        'background:linear-gradient(90deg,transparent,rgba(124,92,255,.5),rgba(34,211,238,.5),transparent);'
+        'margin:1.5rem 0;border-radius:2px;"></div>'
+    )
 
 
 def section_title_html(text: str) -> str:
