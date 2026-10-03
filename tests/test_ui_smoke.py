@@ -57,5 +57,81 @@ class TestAppSmoke(unittest.TestCase):
         self.assertEqual(at.session_state["messages"][2]["role"], "assistant")
 
 
+class TestUIHelpers(unittest.TestCase):
+    """Verify ui.py helpers produce clean, parseable HTML."""
+
+    def test_no_blank_lines_or_leading_spaces_in_helpers(self):
+        """No ui.py helper should emit blank lines or 4+ space indents."""
+        import ui
+
+        helpers = [
+            name for name in dir(ui)
+            if not name.startswith("_") and callable(getattr(ui, name))
+        ]
+
+        for helper_name in helpers:
+            fn = getattr(ui, helper_name)
+            try:
+                # Call with minimal args where needed
+                if helper_name == "hero_html":
+                    result = fn("Test", "Tagline")
+                elif helper_name == "chip_html":
+                    result = fn("Label", "upcoming")
+                elif helper_name == "glass_card_html":
+                    result = fn("<p>test</p>")
+                elif helper_name in ("empty_chat_html", "empty_deadlines_html", "empty_workload_html"):
+                    result = fn()
+                elif helper_name == "countdown_cards_html":
+                    result = fn([])
+                elif helper_name in ("quick_action_pills_html", "urgency_chips_html", "step_strip_html", "feature_cards_html", "divider_html", "section_title_html"):
+                    result = fn()
+                elif helper_name == "onboarding_card_html":
+                    result = fn()
+                else:
+                    continue
+
+                lines = result.splitlines()
+                for i, line in enumerate(lines):
+                    stripped = line.rstrip()
+                    if stripped == "":
+                        self.fail(
+                            f"{helper_name}() returned a blank line at index {i}: {result!r}"
+                        )
+                    if line.startswith("    "):
+                        self.fail(
+                            f"{helper_name}() has a line starting with 4+ spaces "
+                            f"at index {i}: {line!r}"
+                        )
+            except TypeError:
+                # Skip helpers that need args we can't provide
+                pass
+
+
+class TestMarkdownSafety(unittest.TestCase):
+    """Every st.markdown() with HTML tags must use unsafe_allow_html=True."""
+
+    def test_markdown_with_html_has_unsafe_allow_html(self):
+        import ast
+        with open("app.py", encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "markdown":
+                # Find if unsafe_allow_html=True is passed
+                has_unsafe = any(
+                    kw.arg == "unsafe_allow_html" and isinstance(kw.value, ast.Constant) and kw.value.value is True
+                    for kw in node.keywords
+                )
+                # Check if the first arg contains HTML tags
+                if node.args:
+                    arg = node.args[0]
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        if "<div" in arg.value or "<span" in arg.value or "<section" in arg.value:
+                            self.assertTrue(
+                                has_unsafe,
+                                f"st.markdown() at line {node.lineno} contains HTML but lacks unsafe_allow_html=True"
+                            )
+
+
 if __name__ == "__main__":
     unittest.main()
