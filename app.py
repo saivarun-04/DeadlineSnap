@@ -3,6 +3,7 @@
 import datetime
 import json
 import smtplib
+import ssl
 import uuid
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
@@ -20,9 +21,15 @@ import core
 MODEL_NAME = "gemini-3.5-flash"
 PAGE_TITLE = "DeadlineSnap"
 PAGE_ICON = "📅"
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT_SSL = 465
+SMTP_PORT_STARTTLS = 587
+SMTP_TIMEOUT = 20
+
 
 # Initialize page config
 st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="wide")
+
 
 # Cache Gemini client to avoid "client has been closed" bug
 @st.cache_resource
@@ -86,7 +93,6 @@ def render_onboarding():
 
             # Initialize chat
             client = get_gemini_client()
-            today_str = datetime.date.today().strftime('%Y-%m-%d')
             system_prompt = prompts.build_system_prompt(datetime.date.today())
             config = types.GenerateContentConfig(system_instruction=system_prompt)
             chat = client.chats.create(model=MODEL_NAME, config=config)
@@ -177,31 +183,62 @@ def extract_deadlines() -> List[Dict[str, Any]]:
 
 # Send email
 def send_email(to_address: str, subject: str, body: str, ics_bytes: bytes) -> Tuple[bool, str]:
-    """Send email with Gmail SMTP"""
+    """Send email with Gmail SMTP using SSL (465) or STARTTLS (587).
+
+    The app password is stripped of all whitespace because Google displays
+    them in groups of 4 characters, but SMTP requires a continuous string.
+    """
+    gmail_address = st.secrets["GMAIL_ADDRESS"].strip()
+    # Strip ALL internal whitespace from the app password
+    gmail_password = st.secrets["GMAIL_APP_PASSWORD"].replace(' ', '').replace('\t', '')
+
+    msg = MIMEMultipart()
+    msg['From'] = gmail_address
+    msg['To'] = to_address
+    msg['Subject'] = subject
+
+    # Attach text body
+    msg.attach(MIMEText(body, 'plain'))
+
+    # Attach .ics file
+    ics_part = MIMEBase('text', 'calendar')
+    ics_part.set_payload(ics_bytes)
+    ics_part.add_header('Content-Disposition', 'attachment', filename='deadlines.ics')
+    msg.attach(ics_part)
+
+    context = ssl.create_default_context()
+
+    # Try SSL first (port 465)
     try:
-        msg = MIMEMultipart()
-        msg['From'] = st.secrets["GMAIL_ADDRESS"]
-        msg['To'] = to_address
-        msg['Subject'] = subject
-
-        # Attach text body
-        msg.attach(MIMEText(body, 'plain'))
-
-        # Attach .ics file
-        ics_part = MIMEBase('text', 'calendar')
-        ics_part.set_payload(ics_bytes)
-        ics_part.add_header('Content-Disposition', 'attachment', filename='deadlines.ics')
-        msg.attach(ics_part)
-
-        # Send
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(st.secrets["GMAIL_ADDRESS"], st.secrets["GMAIL_APP_PASSWORD"])
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT_SSL, context=context, timeout=SMTP_TIMEOUT) as server:
+            server.login(gmail_address, gmail_password)
             server.send_message(msg)
-        return True, "Email sent successfully"
+        return True, f"Email sent successfully via port {SMTP_PORT_SSL}"
     except smtplib.SMTPAuthenticationError:
         return False, "Gmail rejected the login. Use a 16-character App Password (myaccount.google.com/apppasswords), not your normal password, and make sure 2-Step Verification is on."
-    except Exception as e:
-        return False, f"Failed to send email: {str(e)}"
+    except (smtplib.SMTPServerDisconnected, ConnectionError, TimeoutError, ssl.SSLError, OSError):
+        pass  # Fall through to STARTTLS
+
+    # Fallback to STARTTLS (port 587)
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT_STARTTLS, timeout=SMTP_TIMEOUT) as server:
+            server.ehlo()
+            server.starttls(context=context)
+            server.ehlo()
+            server.login(gmail_address, gmail_password)
+            server.send_message(msg)
+        return True, f"Email sent successfully via port {SMTP_PORT_STARTTLS}"
+    except smtplib.SMTPAuthenticationError:
+        return False, "Gmail rejected the login. Use a 16-character App Password (myaccount.google.com/apppasswords), not your normal password, and make sure 2-Step Verification is on."
+    except (smtplib.SMTPServerDisconnected, ConnectionError, TimeoutError, ssl.SSLError, OSError):
+        pass  # Both failed
+
+    # Neither port worked
+    return False, (
+        "Couldn't reach Gmail on port 465 or 587. Your network may be blocking SMTP "
+        "(college Wi-Fi, firewall or antivirus). Try a mobile hotspot, or use the download buttons. "
+        "It should work once deployed."
+    )
 
 
 # Build digest
