@@ -340,6 +340,9 @@ def main():
     # Sidebar (always shown)
     _render_sidebar()
 
+    # Chat input (outside tabs to avoid duplicate IDs)
+    user_input = st.chat_input("Ask about deadlines or upload an image", accept_file=True, file_type=["jpg", "jpeg", "png"], key="chat_input")
+
 
 def _render_chat_tab():
     """Render the chat tab with quick actions and message history."""
@@ -354,9 +357,6 @@ def _render_chat_tab():
     # Display chat history
     for msg in st.session_state.messages[1:]:
         render_message(msg)
-
-    # Chat input with image support
-    user_input = st.chat_input("Ask about deadlines or upload an image", accept_file=True, file_type=["jpg", "jpeg", "png"])
 
     if user_input:
         # Check what type user_input is (text or uploaded file)
@@ -601,10 +601,6 @@ def _render_sidebar():
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()
-
-
-if __name__ == "__main__":
-    main()
 
 
 if __name__ == "__main__":
