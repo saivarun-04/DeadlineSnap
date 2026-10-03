@@ -15,7 +15,11 @@ from google.genai import types
 
 import prompts
 import core
-from ui import inject_css, hero_html
+from ui import inject_css, hero_html, step_strip_html, feature_cards_html, \
+    onboarding_card_html, empty_chat_html, empty_deadlines_html, \
+    empty_workload_html, countdown_cards_html, urgency_chips_html, \
+    quick_action_pills_html, divider_html, section_title_html
+from html import escape as html_escape
 
 # Constants
 MODEL_NAME = "gemini-3.5-flash"
@@ -79,8 +83,10 @@ def init_session_state():
 def render_onboarding():
     """Render the onboarding form"""
     with st.form("onboarding"):
-        name = st.text_input("Your Name", placeholder="Enter your full name")
-        email = st.text_input("Your Email", placeholder="student@university.edu")
+        name = st.text_input("Your Name", placeholder="Enter your full name",
+                             help="So we can greet you by name")
+        email = st.text_input("Your Email", placeholder="student@university.edu",
+                              help="We'll send your deadline digest here")
         submitted = st.form_submit_button("Get Started")
 
         if submitted:
@@ -141,7 +147,7 @@ def ask_gemini(parts: List[types.Part]) -> str:
     BACKOFF_SECS = [2, 4, 8]
 
     try:
-        with st.spinner("Thinking..."):
+        with st.spinner("Reading your timetable..."):
             response = st.session_state.chat.send_message(parts)
             return response.text
     except Exception as e:
@@ -310,162 +316,368 @@ def build_digest(deadlines: List[Dict[str, Any]], today: datetime.date) -> str:
     return "\n".join(lines)
 
 
-# Main app
-def main():
-    """Main app function"""
-    validate_secrets()
-    init_session_state()
+# ─── Landing page (shown before onboarding) ───────────────────────────────────
 
-    # Header
+def render_landing():
+    """Render the landing / onboarding page."""
+    # Hero
+    st.markdown(hero_html(PAGE_TITLE, "Never miss a submission again."), unsafe_allow_html=True)
+    st.markdown(step_strip_html(), unsafe_allow_html=True)
+    st.markdown(divider_html())
+
+    # Onboarding form inside glass card
+    st.markdown(onboarding_card_html(), unsafe_allow_html=True)
+    render_onboarding()
+    st.markdown(
+        '<p class="ds-trust-note">Your photos and email are used only in this session and are never stored.</p>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(divider_html())
+
+    # Feature cards
+    st.markdown(feature_cards_html(), unsafe_allow_html=True)
+
+    # Who it's for
+    st.markdown(
+        '<p style="text-align:center;color:var(--ds-muted);font-size:.9rem;margin-top:1rem;">'
+        'Built for students juggling many subjects, late-night study sessions, and chaotic timetables.</p>',
+        unsafe_allow_html=True,
+    )
+
+
+# ─── Main app (shown after onboarding) ───────────────────────────────────────
+
+def render_main():
+    """Render the main app after onboarding — chat, deadlines, workload tabs."""
+    name = st.session_state.name
+    deadlines = st.session_state.deadlines
+    n_dl = len(deadlines)
+
+    # Compact header
+    st.markdown(
+        f'<p style="font-size:.95rem;color:var(--ds-muted);margin:0 0 .25rem;">'
+        f'Welcome back, <strong style="color:var(--ds-text);">{html_escape(name)}</strong></p>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<p style="font-size:.8rem;color:var(--ds-muted);margin:0 0 1rem;">'
+        f'{n_dl} deadline{"s" if n_dl != 1 else ""} tracked</p>',
+        unsafe_allow_html=True,
+    )
+
+    # Tabs: Chat · Deadlines · Workload
+    tab1, tab2, tab3 = st.tabs(["💬 Chat", "📅 Deadlines", "📊 Workload"])
+
+    # ── Chat tab ──────────────────────────────────────────────────────────────
+    with tab1:
+        # Quick-action pills
+        st.markdown(quick_action_pills_html(), unsafe_allow_html=True)
+
+        # Welcome / empty state
+        if len(st.session_state.messages) <= 1:
+            st.markdown(
+                empty_chat_html(
+                    "Upload a photo of your timetable or syllabus, or type something like "
+                    "<code style='background:rgba(var(--ds-accent-rgb),.15);padding:.1rem .35rem;"
+                    "border-radius:4px;'>Quiz on 12 Oct, report due 20 Oct</code>."
+                ),
+                unsafe_allow_html=True,
+            )
+
+        # Welcome message (only show once)
+        if len(st.session_state.messages) == 1:
+            render_message(st.session_state.messages[0])
+
+        # Display chat history
+        for msg in st.session_state.messages[1:]:
+            render_message(msg)
+
+        # Chat input with image support
+        user_input = st.chat_input(
+            "Ask about deadlines or upload an image",
+            accept_file=True,
+            file_type=["jpg", "jpeg", "png"],
+        )
+
+        if user_input:
+            parts = []
+            if hasattr(user_input, 'text') and user_input.text:
+                parts.append(types.Part.from_text(text=user_input.text))
+                add_message("user", "text", user_input.text)
+                render_message({"role": "user", "kind": "text", "content": user_input.text})
+            elif hasattr(user_input, 'type'):
+                bytes_data = user_input.getvalue()
+                photo_part = types.Part.from_bytes(data=bytes_data, mime_type=user_input.type)
+                parts.append(photo_part)
+                parts.append(types.Part.from_text(
+                    text="List every deadline and date you can find in this image."
+                ))
+                add_message("user", "image", bytes_data)
+                render_message({"role": "user", "kind": "image", "content": bytes_data})
+            else:
+                parts.append(types.Part.from_text(text=str(user_input)))
+                add_message("user", "text", str(user_input))
+                render_message({"role": "user", "kind": "text", "content": str(user_input)})
+
+            if parts:
+                response = ask_gemini(parts)
+                add_message("assistant", "text", response)
+                render_message({"role": "assistant", "kind": "text", "content": response})
+                extracted = extract_deadlines()
+                if extracted:
+                    st.session_state.deadlines = core.merge_deadlines(
+                        st.session_state.deadlines, extracted
+                    )
+            st.rerun()
+
+    # ── Deadlines tab ─────────────────────────────────────────────────────────
+    with tab2:
+        st.markdown(section_title_html("Your deadlines"))
+        st.markdown(
+            '<p style="font-size:.82rem;color:var(--ds-muted);margin:-.25rem 0 1rem;">'
+            'Check the dates — AI can misread handwriting. Fix anything, then hit Email.</p>',
+            unsafe_allow_html=True,
+        )
+
+        # Countdown cards for next 3 deadlines
+        if deadlines:
+            # Tag each deadline with its urgency for the countdown cards
+            today = datetime.date.today()
+            tagged = []
+            for d in deadlines:
+                d_copy = dict(d)
+                d_copy["_urgency"] = core.urgency_label(d, today)
+                tagged.append(d_copy)
+            st.markdown(countdown_cards_html(tagged), unsafe_allow_html=True)
+            st.markdown(divider_html())
+
+        # Urgency legend
+        st.markdown(urgency_chips_html())
+
+        # Empty state
+        if not deadlines:
+            st.markdown(empty_deadlines_html("No deadlines yet — go to the Chat tab and upload a photo."), unsafe_allow_html=True)
+        else:
+            # Editable deadlines table
+            for d in deadlines:
+                d.setdefault("id", "")
+                d.setdefault("title", "")
+                d.setdefault("course", "")
+                d.setdefault("date", "")
+                d.setdefault("time", "")
+                d.setdefault("type", "other")
+                d.setdefault("est_hours", 1)
+                d.setdefault("weight", 1)
+                d.setdefault("confidence", "medium")
+                d.setdefault("notes", "")
+                d.setdefault("source", "typed")
+            df = st.dataframe(
+                deadlines,
+                column_config={
+                    "id": st.column_config.HiddenColumn(default=""),
+                    "title": st.column_config.TextColumn("Title", default=""),
+                    "course": st.column_config.TextColumn("Course", default=""),
+                    "date": st.column_config.DateColumn("Date", default=""),
+                    "time": st.column_config.TextColumn("Time", default=""),
+                    "type": st.column_config.SelectboxColumn(
+                        "Type",
+                        options=["exam", "quiz", "assignment", "project", "lab", "event", "other"],
+                        default="other",
+                    ),
+                    "est_hours": st.column_config.NumberColumn("Est. hours", default=1.0, min_value=0.1, step=0.5),
+                    "weight": st.column_config.NumberColumn("Weight (1-5)", default=1, min_value=1, max_value=5, step=1),
+                    "confidence": st.column_config.SelectboxColumn(
+                        "Confidence",
+                        options=["high", "medium", "low"],
+                        default="medium",
+                    ),
+                    "notes": st.column_config.TextColumn("Notes", default=""),
+                    "source": st.column_config.TextColumn("Source", default="typed", disabled=True),
+                },
+                use_container_width=True,
+                hide_index=True,
+            )
+            # Sync edits back to session state
+            if df is not None and df is not deadlines:
+                st.session_state.deadlines = df.to_dict("records")
+
+    # ── Workload tab ──────────────────────────────────────────────────────────
+    with tab3:
+        st.markdown(section_title_html("Study plan & workload"))
+        st.markdown(
+            '<p style="font-size:.82rem;color:var(--ds-muted);margin:-.25rem 0 1rem;">'
+            'Start-by dates are calculated backwards from each due date.</p>',
+            unsafe_allow_html=True,
+        )
+
+        if not deadlines:
+            st.markdown(empty_workload_html(), unsafe_allow_html=True)
+        else:
+            today = datetime.date.today()
+            sessions, unschedulable = core.build_study_plan(deadlines, daily_max_hours=4.0, today=today)
+            crunch = core.find_crunch_days(deadlines)
+
+            # Study plan table
+            if sessions:
+                st.markdown(
+                    '<p style="font-size:.9rem;font-weight:600;color:var(--ds-text);margin:.5rem 0 .5rem;">'
+                    'Suggested study sessions</p>',
+                    unsafe_allow_html=True,
+                )
+                st.dataframe(
+                    sessions,
+                    column_config={
+                        "date": st.column_config.DateColumn("Date"),
+                        "title": st.column_config.TextColumn("Deadline"),
+                        "hours": st.column_config.NumberColumn("Hours", format="%.1f"),
+                    },
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+            # Crunch-day warnings
+            if crunch:
+                st.markdown(
+                    '<p style="font-size:.9rem;font-weight:600;color:var(--ds-text);margin:.75rem 0 .5rem;">'
+                    '⚠️ Crunch weeks detected</p>',
+                    unsafe_allow_html=True,
+                )
+                for cw in crunch:
+                    st.warning(
+                        f"**Week {cw['year']}-W{cw['week']:02d}**: {cw['deadlines']} deadlines, "
+                        f"~{cw['hours']}h of work. Sample: {', '.join(cw.get('sample_dates', [])[:2])}"
+                    )
+
+    # ── Header bar (top of main screen) ───────────────────────────────────────
     col1, col2 = st.columns([5, 2], vertical_alignment="center")
     with col1:
-        st.title(f"{PAGE_TITLE} {PAGE_ICON}")
+        st.markdown(
+            f'<p style="font-size:.85rem;color:var(--ds-muted);margin:0;">'
+            f'<strong style="color:var(--ds-text);">{PAGE_TITLE}</strong> {PAGE_ICON}</p>',
+            unsafe_allow_html=True,
+        )
     with col2:
-        if len(st.session_state.messages) > 2:
-            btn_disabled = st.session_state.get("sending", False)
-            if st.button("📧 Email my deadlines", type="primary", disabled=btn_disabled):
-                st.session_state.sending = True
-                st.rerun()
+        btn_disabled = st.session_state.get("sending", False)
+        has_deadlines = bool(st.session_state.deadlines)
+        if st.button("📧 Email my deadlines", type="primary", disabled=btn_disabled or not has_deadlines):
+            st.session_state.sending = True
+            st.rerun()
+        if not has_deadlines:
+            st.markdown(
+                '<p style="font-size:.75rem;color:var(--ds-muted);margin-top:.25rem;text-align:right;">'
+                'Add at least one deadline first</p>',
+                unsafe_allow_html=True,
+            )
 
-    # Handle email sending
+    # ── Handle email sending ──────────────────────────────────────────────────
     if st.session_state.get("sending"):
-        # Use the edited session data, not raw Gemini output
-        deadlines = st.session_state.deadlines
-        if not deadlines:
-            # Fall back to extraction if session state is empty
-            deadlines = extract_deadlines()
-            if deadlines:
-                st.session_state.deadlines = core.merge_deadlines(st.session_state.deadlines, deadlines)
-                deadlines = st.session_state.deadlines
+        deadlines_send = st.session_state.deadlines
+        if not deadlines_send:
+            deadlines_send = extract_deadlines()
+            if deadlines_send:
+                st.session_state.deadlines = core.merge_deadlines(
+                    st.session_state.deadlines, deadlines_send
+                )
+                deadlines_send = st.session_state.deadlines
 
         today = datetime.date.today()
 
-        if not deadlines:
-            st.info("I couldn't find any dated deadlines in this chat yet - try a clearer photo or type them in.")
+        if not deadlines_send:
+            st.info("I couldn't find any dated deadlines in this chat yet — try a clearer photo or type them in.")
             st.session_state.sending = False
             st.rerun()
 
-        # Sort deadlines
-        deadlines.sort(key=lambda d: d.get('date', '9999-12-31'))
+        deadlines_send.sort(key=lambda d: d.get('date', '9999-12-31'))
+        digest = build_digest(deadlines_send, today)
+        ics_bytes = core.build_ics(deadlines_send)
 
-        # Build digest
-        digest = build_digest(deadlines, today)
+        with st.expander("📧 Email preview"):
+            st.markdown(
+                f'<div style="font-size:.88rem;line-height:1.6;white-space:pre-wrap;">'
+                f'{html_escape(digest)}</div>',
+                unsafe_allow_html=True,
+            )
 
-        # Build .ics file
-        ics_bytes = core.build_ics(deadlines)
-
-        # Show preview
-        with st.expander("📧 Email Preview"):
-            st.write(digest)
-
-        # Send email
         success, message = send_email(
             st.session_state.email,
-            f"📅 Your {len(deadlines)} deadlines - DeadlineSnap",
+            f"📅 Your {len(deadlines_send)} deadlines — DeadlineSnap",
             digest,
-            ics_bytes
+            ics_bytes,
         )
 
         if success:
             st.success(message)
         else:
-            st.error(message)
+            st.error(f"{message} — you can still download your files below.")
             st.info("You can still download the calendar file:")
 
         st.download_button(
             label="📅 Download Calendar (.ics)",
             data=ics_bytes,
             file_name="deadlines.ics",
-            mime="text/calendar"
+            mime="text/calendar",
         )
-
-        # Also offer CSV download
-        csv_data = core.to_csv(deadlines)
+        csv_data = core.to_csv(deadlines_send)
         st.download_button(
             label="📊 Download CSV",
             data=csv_data,
             file_name="deadlines.csv",
-            mime="text/csv"
+            mime="text/csv",
         )
-
         st.session_state.sending = False
 
-    # Hero banner (only on first render, not on every rerun)
-    if "hero_shown" not in st.session_state:
-        st.session_state.hero_shown = True
-        st.markdown(hero_html(PAGE_TITLE, "Snap your schedule. Never miss a deadline."), unsafe_allow_html=True)
-        st.markdown('<hr class="dsnap-divider">', unsafe_allow_html=True)
-
-    # Sidebar
+    # ── Sidebar ───────────────────────────────────────────────────────────────
     with st.sidebar:
-        st.caption(f"Logged in as: {st.session_state.name}")
-        st.caption(f"Email to: {st.session_state.email}")
+        # User chip
+        initial = (st.session_state.name[0].upper() if st.session_state.name else "?")
+        st.markdown(
+            f'<div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1.25rem;">'
+            f'<div style="width:36px;height:36px;border-radius:50%;'
+            f'background:linear-gradient(135deg,var(--ds-accent),var(--ds-cyan));'
+            f'display:flex;align-items:center;justify-content:center;'
+            f'font-weight:700;font-size:.9rem;color:#fff;flex-shrink:0;">'
+            f'{initial}</div>'
+            f'<div>'
+            f'<div style="font-weight:600;font-size:.9rem;">{st.session_state.name}</div>'
+            f'<div style="font-size:.75rem;color:var(--ds-muted);">{st.session_state.email}</div>'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
 
-        st.subheader("How it works")
+        st.markdown(section_title_html("How it works"))
         st.write("1. Upload a photo of your syllabus/timetable")
         st.write("2. Type deadlines directly")
         st.write("3. Review and edit deadlines")
         st.write("4. Email yourself a digest + calendar file")
 
+        st.markdown(divider_html())
         st.info("💡 Tip: Use good lighting, capture the whole page, and ensure text is readable")
+        st.markdown(divider_html())
 
-        if st.button("🔄 Start Over"):
+        st.markdown(
+            '<p style="font-size:.75rem;color:var(--ds-muted);margin:0 0 .75rem;">'
+            'Your data stays in this browser session — nothing is stored on our servers.</p>',
+            unsafe_allow_html=True,
+        )
+
+        if st.button("🔄 Start over"):
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()
 
-    # Onboarding or chat
+
+# ─── Entry point ──────────────────────────────────────────────────────────────
+
+def main():
+    """Main app function"""
+    validate_secrets()
+    init_session_state()
+
     if not st.session_state.onboarded:
-        st.info("Welcome to DeadlineSnap! Let's get you set up.")
-        render_onboarding()
+        render_landing()
         st.stop()
 
-    # Welcome message (only show once)
-    if len(st.session_state.messages) == 1:
-        render_message(st.session_state.messages[0])
-
-    # Display chat history
-    for msg in st.session_state.messages[1:]:
-        render_message(msg)
-
-    # Chat input with image support
-    user_input = st.chat_input("Ask about deadlines or upload an image", accept_file=True, file_type=["jpg", "jpeg", "png"])
-
-    if user_input:
-        # Check what type user_input is (text or uploaded file)
-        parts = []
-
-        if hasattr(user_input, 'text') and user_input.text:
-            # Text input
-            parts.append(types.Part.from_text(text=user_input.text))
-            add_message("user", "text", user_input.text)
-            render_message({"role": "user", "kind": "text", "content": user_input.text})
-        elif hasattr(user_input, 'type'):
-            # Image input
-            bytes_data = user_input.getvalue()
-            photo_part = types.Part.from_bytes(data=bytes_data, mime_type=user_input.type)
-            parts.append(photo_part)
-            parts.append(types.Part.from_text(text="List every deadline and date you can find in this image."))
-            add_message("user", "image", bytes_data)
-            render_message({"role": "user", "kind": "image", "content": bytes_data})
-        else:
-            # Fallback: treat as text
-            parts.append(types.Part.from_text(text=str(user_input)))
-            add_message("user", "text", str(user_input))
-            render_message({"role": "user", "kind": "text", "content": str(user_input)})
-
-        # Get Gemini response
-        if parts:
-            response = ask_gemini(parts)
-            add_message("assistant", "text", response)
-            render_message({"role": "assistant", "kind": "text", "content": response})
-
-            # Extract deadlines from the conversation
-            extracted = extract_deadlines()
-            if extracted:
-                st.session_state.deadlines = core.merge_deadlines(st.session_state.deadlines, extracted)
-
-        st.rerun()
+    render_main()
 
 
 if __name__ == "__main__":
