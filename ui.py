@@ -189,7 +189,15 @@ html               { scroll-behavior: smooth; }
     font-weight: 800;
     letter-spacing: -0.02em;
     line-height: 1.1;
-    margin: 0 0 .4rem;
+    margin: 1.25rem 0 .5rem;
+    color: var(--ds-text);
+}
+.ds-hero-content p {
+    font-size: 1.08rem;
+    line-height: 1.55;
+    color: var(--ds-text-muted);
+    max-width: 620px;
+    margin: 0 auto;
 }
 .ds-gradient-text {
     background: linear-gradient(135deg, var(--ds-accent), var(--ds-cyan));
@@ -201,6 +209,18 @@ html               { scroll-behavior: smooth; }
     color: var(--ds-muted);
     font-size: 1.05rem;
     margin: 0;
+}
+.ds-brand-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .3rem .7rem;
+    border-radius: 999px;
+    background: rgba(var(--ds-accent-rgb), .15);
+    border: 1px solid rgba(var(--ds-accent-rgb), .3);
+    color: var(--ds-text);
+    font-size: .82rem;
+    font-weight: 600;
 }
 
 /* ── Step strip ─────────────────────────────────────────────────────────────── */
@@ -265,22 +285,26 @@ html               { scroll-behavior: smooth; }
     line-height: 1.5;
 }
 
-/* ── Glassmorphism card (onboarding) ─────────────────────────────────────────── */
-.ds-card-wrap {
+/* ── Onboarding form as glass card ──────────────────────────────────────────── */
+/* Streamlit internal selector for the form container */
+[data-testid="stForm"] {
+    max-width: 520px !important;
+    margin: 0 auto !important;
+    padding: 28px 32px !important;
+    border-radius: 24px !important;
+    background: rgba(18, 25, 51, .85) !important;
+    border: 1px solid rgba(var(--ds-accent-rgb), .25) !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.06),
+        var(--ds-shadow-md) !important;
     position: relative;
-    border-radius: var(--ds-radius-lg);
-    padding: 2px;
-    max-width: 480px;
-    margin: 0 auto;
 }
-@supports not (background: conic-gradient(from var(--ds-angle), red, blue)) {
-    .ds-card-wrap { border: 1px solid rgba(var(--ds-accent-rgb), .3); padding: 0; }
-}
-.ds-card-wrap::before {
+/* Animated gradient border on the form */
+[data-testid="stForm"]::before {
     content: '';
     position: absolute;
     inset: 0;
-    border-radius: inherit;
+    border-radius: 24px;
     padding: 2px;
     background: conic-gradient(from var(--ds-angle), var(--ds-accent), var(--ds-cyan), var(--ds-accent));
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -289,10 +313,11 @@ html               { scroll-behavior: smooth; }
     pointer-events: none;
     animation: ds-spin 4s linear infinite;
 }
-.ds-card-inner {
-    background: var(--ds-surface);
-    border-radius: calc(var(--ds-radius-lg) - 2px);
-    padding: 2rem;
+@supports not (background: conic-gradient(from var(--ds-angle), red, blue)) {
+    [data-testid="stForm"] {
+        border: 1px solid rgba(var(--ds-accent-rgb), .3) !important;
+    }
+    [data-testid="stForm"]::before { display: none; }
 }
 
 /* ── Staggered entrance ─────────────────────────────────────────────────────── */
@@ -368,6 +393,34 @@ button[kind="primary"]:focus-visible,
     border-color: var(--ds-accent) !important;
 }
 .stButton > button:not([kind]):focus-visible {
+    outline: 2px solid var(--ds-cyan) !important;
+    outline-offset: 2px !important;
+}
+/* Form submit button — full-width gradient */
+[data-testid="stForm"] [type="submit"],
+[data-testid="stFormSubmitButton"] button {
+    width: 100% !important;
+    height: 48px !important;
+    background: linear-gradient(135deg, var(--ds-accent) 0%, var(--ds-cyan) 100%) !important;
+    color: #fff !important;
+    font-weight: 700 !important;
+    font-size: 1rem !important;
+    border: none !important;
+    border-radius: var(--ds-radius-md) !important;
+    box-shadow: var(--ds-glow) !important;
+    transition: transform var(--ds-tr), box-shadow var(--ds-tr) !important;
+}
+[data-testid="stForm"] [type="submit"]:hover,
+[data-testid="stFormSubmitButton"] button:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 6px 24px rgba(var(--ds-accent-rgb), .45) !important;
+}
+[data-testid="stForm"] [type="submit"]:active,
+[data-testid="stFormSubmitButton"] button:active {
+    transform: translateY(0) !important;
+}
+[data-testid="stForm"] [type="submit"]:focus-visible,
+[data-testid="stFormSubmitButton"] button:focus-visible {
     outline: 2px solid var(--ds-cyan) !important;
     outline-offset: 2px !important;
 }
@@ -775,16 +828,27 @@ def _svg_icon(name: str) -> str:
 
 
 def hero_html(title: str, tagline: str) -> str:
-    """Pure HTML hero banner. Text is html.escape()d inside."""
+    """Pure HTML hero banner with brand chip, headline, and sub-paragraph."""
     safe_title = html_escape(str(title))
-    safe_tagline = html_escape(str(tagline))
     return (
         f'<div class="ds-hero-wrap">'
         f'  <div class="ds-aurora ds-aurora--a"></div>'
         f'  <div class="ds-aurora ds-aurora--b"></div>'
         f'  <div class="ds-hero-content">'
-        f'    <h1><span class="ds-gradient-text">{safe_title}</span></h1>'
-        f'    <p>{safe_tagline}</p>'
+        f'    <div class="ds-brand-chip">'
+        f'      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" '
+        f'        stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+        f'        stroke-linejoin="round" aria-hidden="true">'
+        f'        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>'
+        f'        <line x1="16" y1="2" x2="16" y2="6"/>'
+        f'        <line x1="8" y1="2" x2="8" y2="6"/>'
+        f'        <line x1="3" y1="10" x2="21" y2="10"/>'
+        f'      </svg>'
+        f'      <span>{safe_title}</span>'
+        f'    </div>'
+        f'    <h1>Never miss a <span class="ds-gradient-text">submission</span> again.</h1>'
+        f'    <p>Snap a photo of your timetable or syllabus. We pull out every deadline, '
+        f'      build your study plan and send it to your calendar.</p>'
         f'  </div>'
         f'</div>'
     )

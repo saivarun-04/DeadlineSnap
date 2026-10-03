@@ -16,7 +16,7 @@ from google.genai import types
 import prompts
 import core
 from ui import inject_css, hero_html, step_strip_html, feature_cards_html, \
-    onboarding_card_html, empty_chat_html, empty_deadlines_html, \
+    empty_chat_html, empty_deadlines_html, \
     empty_workload_html, countdown_cards_html, urgency_chips_html, \
     quick_action_pills_html, divider_html, section_title_html
 from html import escape as html_escape
@@ -81,12 +81,21 @@ def init_session_state():
 
 # Onboarding form
 def render_onboarding():
-    """Render the onboarding form"""
+    """Render the onboarding form inside a glass card."""
+    # Card header inside the form
+    st.markdown(
+        '<div style="text-align:center;margin-bottom:1.5rem;">'
+        '<h2 style="margin:0 0 .25rem;font-size:1.3rem;font-weight:700;color:var(--ds-text);">'
+        'Get started — it\'s free</h2>'
+        '<p style="margin:0;font-size:.88rem;color:var(--ds-muted);">No credit card. No sign-up wall. Just your deadlines.</p>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     with st.form("onboarding"):
-        name = st.text_input("Your Name", placeholder="Enter your full name",
-                             help="So we can greet you by name")
-        email = st.text_input("Your Email", placeholder="student@university.edu",
-                              help="We'll send your deadline digest here")
+        name = st.text_input("Your Name", placeholder="Enter your full name")
+        st.caption('So we can greet you')
+        email = st.text_input("Your Email", placeholder="student@university.edu")
+        st.caption("We'll send your deadline digest here")
         submitted = st.form_submit_button("Get Started")
 
         if submitted:
@@ -323,16 +332,16 @@ def render_landing():
     # Hero
     st.markdown(hero_html(PAGE_TITLE, "Never miss a submission again."), unsafe_allow_html=True)
     st.markdown(step_strip_html(), unsafe_allow_html=True)
-    st.markdown(divider_html())
+    st.markdown(divider_html(), unsafe_allow_html=True)
 
     # Onboarding form inside glass card
-    st.markdown(onboarding_card_html(), unsafe_allow_html=True)
     render_onboarding()
     st.markdown(
-        '<p class="ds-trust-note">Your photos and email are used only in this session and are never stored.</p>',
+        '<p style="text-align:center;font-size:.75rem;color:var(--ds-muted);margin-top:1rem;">'
+        'Your photos and email are used only in this session and are never stored.</p>',
         unsafe_allow_html=True,
     )
-    st.markdown(divider_html())
+    st.markdown(divider_html(), unsafe_allow_html=True)
 
     # Feature cards
     st.markdown(feature_cards_html(), unsafe_allow_html=True)
@@ -449,10 +458,10 @@ def render_main():
                 d_copy["_urgency"] = core.urgency_label(d, today)
                 tagged.append(d_copy)
             st.markdown(countdown_cards_html(tagged), unsafe_allow_html=True)
-            st.markdown(divider_html())
+            st.markdown(divider_html(), unsafe_allow_html=True)
 
         # Urgency legend
-        st.markdown(urgency_chips_html())
+        st.markdown(urgency_chips_html(), unsafe_allow_html=True)
 
         # Empty state
         if not deadlines:
@@ -650,9 +659,9 @@ def render_main():
         st.write("3. Review and edit deadlines")
         st.write("4. Email yourself a digest + calendar file")
 
-        st.markdown(divider_html())
+        st.markdown(divider_html(), unsafe_allow_html=True)
         st.info("💡 Tip: Use good lighting, capture the whole page, and ensure text is readable")
-        st.markdown(divider_html())
+        st.markdown(divider_html(), unsafe_allow_html=True)
 
         st.markdown(
             '<p style="font-size:.75rem;color:var(--ds-muted);margin:0 0 .75rem;">'
