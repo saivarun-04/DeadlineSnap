@@ -952,7 +952,7 @@ def quick_action_pills_html() -> str:
 
 
 def divider_html() -> str:
-    return '<hr class="ds-divider">'
+    return '<div class="ds-divider" role="separator"></div>'
 
 
 def section_title_html(text: str) -> str:
