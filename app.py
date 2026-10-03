@@ -1,11 +1,9 @@
 """DeadlineSnap - AI Vision Chatbot for Deadline Tracking"""
 
 import datetime
-import json
 import smtplib
 import ssl
 import time
-import uuid
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -17,7 +15,7 @@ from google.genai import types
 
 import prompts
 import core
-from ui import inject_css
+from ui import inject_css, hero_html
 
 # Constants
 MODEL_NAME = "gemini-3.5-flash"
