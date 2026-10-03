@@ -325,11 +325,14 @@ def main():
     if st.session_state.get("onboarded"):
         ui.render_hero()
 
+    # Chat input (outside tabs to avoid duplicate IDs)
+    user_input = st.chat_input("Ask about deadlines or upload an image", accept_file=True, file_type=["jpg", "jpeg", "png"], key="chat_input")
+
     # Tabs
     tabs = st.tabs(["💬 Chat", "📋 Deadlines", "📊 Workload"])
 
     with tabs[0]:  # Chat tab
-        _render_chat_tab()
+        _render_chat_tab(user_input)
 
     with tabs[1]:  # Deadlines tab
         _render_deadlines_tab()
@@ -340,11 +343,8 @@ def main():
     # Sidebar (always shown)
     _render_sidebar()
 
-    # Chat input (outside tabs to avoid duplicate IDs)
-    user_input = st.chat_input("Ask about deadlines or upload an image", accept_file=True, file_type=["jpg", "jpeg", "png"], key="chat_input")
 
-
-def _render_chat_tab():
+def _render_chat_tab(user_input):
     """Render the chat tab with quick actions and message history."""
     # Quick action chips
     if st.session_state.get("onboarded") and len(st.session_state.messages) > 1:
