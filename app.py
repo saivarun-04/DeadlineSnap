@@ -4,6 +4,7 @@ import datetime
 import json
 import smtplib
 import ssl
+import time
 import uuid
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
@@ -16,6 +17,7 @@ from google.genai import types
 
 import prompts
 import core
+from ui import inject_css
 
 # Constants
 MODEL_NAME = "gemini-3.5-flash"
@@ -29,6 +31,7 @@ SMTP_TIMEOUT = 20
 
 # Initialize page config
 st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout="wide")
+inject_css()
 
 
 # Cache Gemini client to avoid "client has been closed" bug
@@ -130,15 +133,37 @@ def add_message(role: str, kind: str, content: Any):
 def ask_gemini(parts: List[types.Part]) -> str:
     """Ask Gemini with parts and return response.
 
-    If the primary model is not found, retries once with gemini-2.5-flash.
+    On 503/UNAVAILABLE/429 errors, retries up to 3 times with exponential
+    backoff (2s, 4s, 8s) using the SAME chat session. If all retries fail,
+    returns a friendly message instead of raw JSON or raw exception text.
+    Also falls back to gemini-2.5-flash on model-not-found errors.
     """
+    RETRYABLE_KEYWORDS = ("503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "overloaded")
+    MAX_RETRIES = 3
+    BACKOFF_SECS = [2, 4, 8]
+
     try:
         with st.spinner("Thinking..."):
             response = st.session_state.chat.send_message(parts)
             return response.text
     except Exception as e:
+        err_str = str(e)
+        is_retryable = any(kw in err_str for kw in RETRYABLE_KEYWORDS)
+        if is_retryable:
+            for attempt, wait in enumerate(BACKOFF_SECS):
+                if attempt >= MAX_RETRIES:
+                    break
+                with st.spinner(f"Google's AI is busy — retrying ({attempt+1}/{MAX_RETRIES})..."):
+                    time.sleep(wait)
+                    try:
+                        response = st.session_state.chat.send_message(parts)
+                        return response.text
+                    except Exception:
+                        pass
+            return "Google's AI is very busy right now. Please wait a few seconds and send again."
+
         # Try fallback model on model-not-found error
-        if "model" in str(e).lower() or "not found" in str(e).lower():
+        if "model" in err_str.lower() or "not found" in err_str.lower():
             try:
                 with st.spinner("Switching to gemini-2.5-flash..."):
                     fallback_chat = st.session_state.chat.client.chats.create(
@@ -152,7 +177,7 @@ def ask_gemini(parts: List[types.Part]) -> str:
                     return response.text
             except Exception:
                 pass
-        return f"Sorry, I encountered an error: {str(e)}. Please try again."
+        return f"Sorry, I encountered an error: {err_str}. Please try again."
 
 
 # Process uploaded image
@@ -169,7 +194,10 @@ def process_image(uploaded_file) -> Optional[types.Part]:
 
 # Extract deadlines from conversation
 def extract_deadlines() -> List[Dict[str, Any]]:
-    """Extract deadlines from conversation using hidden prompt"""
+    """Extract deadlines from conversation using hidden prompt.
+
+    On failure, logs an error but never wipes the existing deadlines table.
+    """
     try:
         with st.spinner("Extracting deadlines..."):
             response = st.session_state.chat.send_message(prompts.EXTRACTION_PROMPT)

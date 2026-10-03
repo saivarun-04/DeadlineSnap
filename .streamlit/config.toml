@@ -1,3 +1,4 @@
+# Streamlit custom theme config
 [theme]
 primaryColor = "#7C5CFF"
 backgroundColor = "#0B1020"
@@ -7,7 +8,6 @@ font = "sans serif"
 
 [server]
 maxUploadSize = 5
-toolbarMode = "minimal"
 
-[logger]
-level = "error"
+[client]
+toolbarMode = "minimal"

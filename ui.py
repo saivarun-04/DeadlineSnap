@@ -1,338 +1,212 @@
-"""UI styling and rendering helpers for DeadlineSnap.
+"""DeadlineSnap UI — pure CSS/HTML skin, zero logic changes.
 
-All CSS injection lives here so app.py stays logic-focused.
+This module only contains ``inject_css()`` and optional HTML string helpers.
+It never touches st.session_state, Gemini, email, or any app logic.
+Import and call inject_css() once after st.set_page_config in app.py.
 """
 
-import streamlit as st
-
-
-# ---------------------------------------------------------------------------
-# CSS injection
-# ---------------------------------------------------------------------------
-
+# Inter font via Google Fonts
 _CSS = """
 <style>
+/* ── Reset & base ───────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-/* Reset & base */
 html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Inter', sans-serif !important;
 }
 
-/* Hide Streamlit default header/footer */
-[data-testid="stHeader"] { display: none; }
-[data-testid="stFooter"] { display: none; }
+/* Hide Streamlit footer + reduce top padding */
+#MainMenu { visibility: hidden; }
+header[data-testid="stHeader"] { display: none; }
+footer { visibility: hidden; }
+[data-testid="stVerticalBlock"] > div:first-child { padding-top: 1rem !important; }
 
-/* Tighten top padding */
-.block-container { padding-top: 1.2rem; padding-bottom: 3rem; }
-
-/* HERO banner */
-.hero-banner {
+/* ── Hero banner ────────────────────────────────────────────── */
+.deadlinesnap-hero {
     background: linear-gradient(135deg, #7C5CFF 0%, #22D3EE 100%);
     border-radius: 16px;
     padding: 2rem 2.5rem;
     margin-bottom: 1.5rem;
-    color: #fff;
+    text-align: center;
+    box-shadow: 0 4px 24px rgba(124,92,255,.25);
 }
-.hero-banner h1 {
-    font-size: 2rem;
-    font-weight: 700;
-    margin: 0 0 0.3rem;
-    color: #fff !important;
+.deadlinesnap-hero h1 {
+    color: #ffffff !important;
+    font-weight: 800 !important;
+    font-size: 2.2rem !important;
+    margin: 0 0 .25rem !important;
+    letter-spacing: -.02em;
 }
-.hero-banner p {
-    font-size: 1rem;
-    opacity: 0.9;
-    margin: 0 0 1rem;
-}
-.hero-pills { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-.hero-pill {
-    background: rgba(255,255,255,0.2);
-    border: 1px solid rgba(255,255,255,0.35);
-    border-radius: 20px;
-    padding: 0.3rem 0.9rem;
-    font-size: 0.8rem;
-    color: #fff;
-    backdrop-filter: blur(4px);
+.deadlinesnap-hero p {
+    color: rgba(255,255,255,.9) !important;
+    font-size: 1rem !important;
+    margin: 0 !important;
 }
 
-/* Onboarding card */
-.onboard-card {
+/* ── Card wrapper for onboarding ────────────────────────────── */
+.deadlinesnap-card {
     background: #121933;
-    border: 1px solid rgba(124,92,255,0.3);
+    border: 1px solid rgba(124,92,255,.25);
     border-radius: 16px;
     padding: 2rem;
+    box-shadow: 0 4px 32px rgba(0,0,0,.4);
     max-width: 480px;
-    margin: 2rem auto;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-}
-.privacy-note {
-    font-size: 0.75rem;
-    color: #8892b0;
-    margin-top: 1rem;
-    text-align: center;
+    margin: 0 auto;
 }
 
-/* Chat bubbles */
-.chat-user {
-    background: linear-gradient(135deg, #7C5CFF, #5b3fd4);
-    color: #fff;
-    border-radius: 16px 16px 4px 16px;
-    padding: 0.75rem 1rem;
-    max-width: 80%;
-    margin-left: auto;
-    margin-bottom: 0.5rem;
+/* ── Gradient submit button ─────────────────────────────────── */
+.deadlinesnap-btn-gradient {
+    background: linear-gradient(135deg, #7C5CFF 0%, #22D3EE 100%) !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    border: none !important;
+    border-radius: 12px !important;
+    padding: .6rem 1.5rem !important;
+    width: 100%;
+    transition: transform .15s ease, box-shadow .15s ease !important;
 }
-.chat-assistant {
-    background: #121933;
-    border: 1px solid rgba(124,92,255,0.25);
-    border-radius: 16px 16px 16px 4px;
-    padding: 0.75rem 1rem;
-    max-width: 80%;
-    margin-bottom: 0.5rem;
+.deadlinesnap-btn-gradient:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(124,92,255,.4) !important;
 }
 
-/* Quick-action chips */
-.action-chips { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
-.action-chip {
-    background: #121933;
-    border: 1px solid rgba(124,92,255,0.4);
-    border-radius: 20px;
-    padding: 0.35rem 0.85rem;
-    font-size: 0.82rem;
-    color: #E8ECF8;
+/* ── Chat bubbles ───────────────────────────────────────────── */
+.st-chat-message {
+    border-radius: 16px !important;
+    padding: .75rem 1rem !important;
+}
+[data-testid="stChatInput"] {
+    border-radius: 16px !important;
+}
+
+/* ── Pill quick-action buttons ──────────────────────────────── */
+.deadlinesnap-pill {
+    display: inline-block;
+    background: rgba(124,92,255,.15);
+    border: 1px solid rgba(124,92,255,.4);
+    color: #E8ECF8 !important;
+    border-radius: 999px !important;
+    padding: .35rem 1rem !important;
+    font-size: .85rem !important;
+    margin: .25rem .15rem !important;
     cursor: pointer;
-    transition: background 0.15s;
+    transition: background .15s ease !important;
 }
-.action-chip:hover { background: rgba(124,92,255,0.25); }
+.deadlinesnap-pill:hover {
+    background: rgba(124,92,255,.3) !important;
+}
 
-/* Metric cards */
-.metric-card {
+/* ── Metric cards ───────────────────────────────────────────── */
+.deadlinesnap-metric {
     background: #121933;
+    border-left: 4px solid #7C5CFF;
     border-radius: 12px;
     padding: 1rem 1.25rem;
-    border-left: 4px solid #7C5CFF;
-    min-height: 80px;
-}
-.metric-card.overdue { border-left-color: #ff4d4d; }
-.metric-card.warning  { border-left-color: #ffae42; }
-.metric-card.caution  { border-left-color: #ffd700; }
-.metric-card.safe     { border-left-color: #90ee90; }
-.metric-card .label   { font-size: 0.75rem; color: #8892b0; text-transform: uppercase; letter-spacing: 0.05em; }
-.metric-card .value   { font-size: 1.1rem; font-weight: 600; color: #E8ECF8; margin-top: 0.2rem; }
-.metric-card .days    { font-size: 0.8rem; color: #8892b0; }
-
-/* Urgency badge */
-.badge {
-    display: inline-block;
-    padding: 0.15rem 0.5rem;
-    border-radius: 12px;
-    font-size: 0.72rem;
-    font-weight: 600;
-}
-.badge-overdue  { background: rgba(255,77,77,0.2); color: #ff6b6b; }
-.badge-warning  { background: rgba(255,174,66,0.2); color: #ffbe42; }
-.badge-caution  { background: rgba(255,215,0,0.2); color: #ffd700; }
-.badge-safe     { background: rgba(144,238,144,0.2); color: #90ee90; }
-
-/* Crunch alert */
-.crunch-alert {
-    background: rgba(255,77,77,0.1);
-    border: 1px solid rgba(255,77,77,0.3);
-    border-radius: 10px;
-    padding: 0.75rem 1rem;
-    margin-bottom: 0.75rem;
-    color: #ff6b6b;
-    font-size: 0.88rem;
+    box-shadow: 0 2px 12px rgba(0,0,0,.3);
 }
 
-/* Sidebar user chip */
-.user-chip {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    background: #121933;
-    border: 1px solid rgba(124,92,255,0.25);
-    border-radius: 12px;
-    padding: 0.6rem 0.8rem;
-    margin-bottom: 1rem;
+/* ── Tabs with active underline ─────────────────────────────── */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+    border-bottom: 2px solid rgba(124,92,255,.2) !important;
 }
-.avatar {
-    width: 36px; height: 36px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #7C5CFF, #22D3EE);
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 0.9rem; color: #fff;
-    flex-shrink: 0;
+.stTabs [data-baseweb="tab"] {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 8px 8px 0 0 !important;
+    padding: .5rem 1.25rem !important;
+    color: #E8ECF8 !important;
+    font-weight: 500 !important;
+    transition: all .15s ease !important;
 }
-.user-info { font-size: 0.82rem; color: #E8ECF8; line-height: 1.3; }
-.user-info .name { font-weight: 600; }
-.user-info .email { color: #8892b0; font-size: 0.75rem; }
-
-/* Stepper */
-.step { display: flex; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.5rem; font-size: 0.85rem; color: #E8ECF8; }
-.step-num {
-    background: #7C5CFF;
-    color: #fff;
-    border-radius: 50%;
-    width: 20px; height: 20px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 0.7rem; font-weight: 700; flex-shrink: 0;
+.stTabs [data-baseweb="tab-highlight"] {
+    background: #7C5CFF !important;
+    height: 3px !important;
+    border-radius: 3px 3px 0 0 !important;
+}
+.stTabs [aria-selected="true"] {
+    color: #22D3EE !important;
+    border-bottom: 2px solid #22D3EE !important;
 }
 
-/* Tip card */
-.tip-card {
-    background: rgba(34,211,238,0.08);
-    border: 1px solid rgba(34,211,238,0.25);
-    border-radius: 10px;
-    padding: 0.6rem 0.8rem;
-    font-size: 0.8rem;
-    color: #90e0ef;
+/* ── Primary / secondary buttons ────────────────────────────── */
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #7C5CFF 0%, #5B3FD4 100%) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 10px !important;
+    padding: .5rem 1.25rem !important;
+    font-weight: 600 !important;
+    transition: transform .15s ease, box-shadow .15s ease !important;
+}
+.stButton > button[kind="primary"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(124,92,255,.4) !important;
+}
+.stButton > button:not([kind]) {
+    background: transparent !important;
+    border: 1.5px solid rgba(124,92,255,.5) !important;
+    color: #E8ECF8 !important;
+    border-radius: 10px !important;
+    padding: .45rem 1.1rem !important;
+    font-weight: 500 !important;
+    transition: all .15s ease !important;
+}
+.stButton > button:not([kind]):hover {
+    background: rgba(124,92,255,.12) !important;
+    border-color: #7C5CFF !important;
 }
 
-/* Buttons — cleaner look */
-.stButton > button {
-    border-radius: 8px;
-    font-weight: 600;
-    min-height: 44px;
+/* ── Sidebar ────────────────────────────────────────────────── */
+.css-1d391kg { /* sidebar container */
+    border-right: 1px solid rgba(124,92,255,.15) !important;
+    padding: 1rem !important;
+}
+.css-1d391kg h2, .css-1d391kg h3, .css-1d391kg h4 {
+    color: #22D3EE !important;
+}
+.css-1d391kg p, .css-1d391kg label, .css-1d391kg span {
+    color: #E8ECF8 !important;
 }
 
-/* Tab styling */
-[data-testid="stTabs"] { margin-top: 0.5rem; }
-[data-testid="stTabs"] [data-testid="stTabContent"] { padding-top: 0.5rem; }
-
-/* Data editor card */
-.editor-card {
-    background: #121933;
-    border: 1px solid rgba(124,92,255,0.2);
-    border-radius: 12px;
-    padding: 1rem;
+/* ── Form inputs ────────────────────────────────────────────── */
+.stTextInput input, .stNumberInput input {
+    border-radius: 10px !important;
+    border: 1px solid rgba(124,92,255,.3) !important;
+    background: #0B1020 !important;
+    color: #E8ECF8 !important;
+}
+.stTextInput input:focus, .stNumberInput input:focus {
+    border-color: #7C5CFF !important;
+    box-shadow: 0 0 0 2px rgba(124,92,255,.25) !important;
 }
 
-/* Action row */
-.action-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; }
+/* ── DataFrame / table ──────────────────────────────────────── */
+.stDataFrame { border-radius: 12px !important; overflow: hidden; }
+.stDataFrame div[data-testid="stTable"] { background: #121933 !important; }
 
-/* Responsive */
-@media (max-width: 600px) {
-    .hero-banner { padding: 1.25rem; }
-    .hero-banner h1 { font-size: 1.4rem; }
-    .onboard-card { margin: 1rem; padding: 1.25rem; }
-    .metric-card { padding: 0.75rem; }
+/* ── Mobile-friendly tap targets ────────────────────────────── */
+button, .stButton > button, a, .deadlinesnap-pill {
+    min-height: 44px !important;
+    min-width: 44px !important;
+}
+
+/* ── General contrast & readability ─────────────────────────── */
+.stApp, .stMarkdown, .stText, p, span, label, div {
+    color: #E8ECF8 !important;
+}
+.stCheckbox label, .stRadio label {
+    color: #E8ECF8 !important;
 }
 </style>
 """
 
 
 def inject_css() -> None:
-    """Inject custom CSS into the Streamlit page."""
+    """Inject the DeadlineSnap custom CSS skin into the Streamlit page.
+
+    Call this once immediately after ``st.set_page_config(...)`` in app.py.
+    Pure CSS — no logic, no session-state, no Gemini, no email.
+    """
+    import streamlit as st
     st.markdown(_CSS, unsafe_allow_html=True)
-
-
-def render_hero() -> None:
-    """Render the gradient hero banner."""
-    st.markdown("""
-<div class="hero-banner">
-    <h1>DeadlineSnap</h1>
-    <p>Snap your schedule. Never miss a deadline.</p>
-    <div class="hero-pills">
-        <span class="hero-pill">📸 Photo to deadlines</span>
-        <span class="hero-pill">📋 Smart study plan</span>
-        <span class="hero-pill">📅 Calendar & email</span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-
-def render_onboarding_card() -> None:
-    """Render the onboarding form inside a styled card."""
-    st.markdown('<div class="onboard-card">', unsafe_allow_html=True)
-    yield  # placeholder — form rendered by caller
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<p class="privacy-note">Your photos and emails are not stored. '
-        'Everything lives in this session only.</p>',
-        unsafe_allow_html=True,
-    )
-
-
-def render_quick_actions() -> None:
-    """Render quick-action chip buttons."""
-    st.markdown('<div class="action-chips">', unsafe_allow_html=True)
-    for label in ["What's due this week?", "What should I start first?",
-                   "Plan my week", "Any clashes?"]:
-        st.markdown(
-            f'<button class="action-chip" '
-            f'onclick="Stroomlit.submit_form(\'quick_action\', \'{label}\')">{label}</button>',
-            unsafe_allow_html=True,
-        )
-    st.markdown('</div>', unsafe_allow_html=True)
-
-
-def render_metric_card(label: str, value: str, days: int, urgency: str) -> None:
-    """Render a single countdown metric card."""
-    cls = {
-        "overdue": "overdue", "warning": "warning",
-        "caution": "caution", "safe": "safe",
-    }.get(urgency, "safe")
-    st.markdown(f"""
-<div class="metric-card {cls}">
-    <div class="label">{label}</div>
-    <div class="value">{value}</div>
-    <div class="days">{days} days left</div>
-</div>
-""", unsafe_allow_html=True)
-
-
-def render_urgency_badge(emoji: str, label: str) -> str:
-    """Return an HTML badge string for urgency display."""
-    cls_map = {
-        "🔴": "badge-overdue", "🟠": "badge-warning",
-        "🟡": "badge-caution", "🟢": "badge-safe",
-    }
-    cls = cls_map.get(emoji, "badge-safe")
-    return f'<span class="badge {cls}">{emoji} {label}</span>'
-
-
-def render_crunch_alert(message: str) -> None:
-    """Render a crunch-week warning alert."""
-    st.markdown(f'<div class="crunch-alert">⚠️ {message}</div>', unsafe_allow_html=True)
-
-
-def render_user_chip(name: str, email: str) -> None:
-    """Render the sidebar user chip."""
-    initial = name[0].upper() if name else "?"
-    st.markdown(f"""
-<div class="user-chip">
-    <div class="avatar">{initial}</div>
-    <div class="user-info">
-        <div class="name">{name}</div>
-        <div class="email">{email}</div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-
-def render_stepper() -> None:
-    """Render the 'How it works' numbered stepper."""
-    steps = [
-        "Upload a photo of your syllabus/timetable",
-        "Type deadlines directly",
-        "Review and edit deadlines",
-        "Email yourself a digest + calendar file",
-    ]
-    for i, step in enumerate(steps, 1):
-        st.markdown(f"""
-<div class="step">
-    <div class="step-num">{i}</div>
-    <span>{step}</span>
-</div>
-""", unsafe_allow_html=True)
-
-
-def render_tip_card() -> None:
-    """Render the tip card."""
-    st.markdown(
-        '<div class="tip-card">💡 Use good lighting, capture the whole page, '
-        'and ensure text is readable.</div>',
-        unsafe_allow_html=True,
-    )
