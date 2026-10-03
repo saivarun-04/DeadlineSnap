@@ -63,6 +63,30 @@ html               { scroll-behavior: smooth; }
 ::-webkit-scrollbar-thumb:hover{ background: rgba(var(--ds-accent-rgb), .6); }
 * { scrollbar-width: thin; scrollbar-color: rgba(var(--ds-accent-rgb),.4) var(--ds-bg); }
 
+/* Fix for widget container height mismatch */
+.st-emotion-cache-k2h9z6 {
+    height: auto;
+    min-height: min-content;
+    align-items: stretch;
+}
+.st-emotion-cache-1edsnvj {
+    display: block;
+    min-height: 1.6em;
+    overflow: visible;
+}
+
+/* Fix for widget container height mismatch */
+.st-emotion-cache-k2h9z6 {
+    height: auto;
+    min-height: min-content;
+    align-items: stretch;
+}
+.st-emotion-cache-1edsnvj {
+    display: block;
+    min-height: 1.6em;
+    overflow: visible;
+}
+
 /* ── Reduced motion ─────────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
