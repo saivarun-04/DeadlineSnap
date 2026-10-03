@@ -392,6 +392,12 @@ def main():
 
         st.session_state.sending = False
 
+    # Hero banner (only on first render, not on every rerun)
+    if "hero_shown" not in st.session_state:
+        st.session_state.hero_shown = True
+        st.markdown(hero_html(PAGE_TITLE, "Snap your schedule. Never miss a deadline."), unsafe_allow_html=True)
+        st.markdown('<hr class="dsnap-divider">', unsafe_allow_html=True)
+
     # Sidebar
     with st.sidebar:
         st.caption(f"Logged in as: {st.session_state.name}")
