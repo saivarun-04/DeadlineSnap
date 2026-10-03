@@ -13,6 +13,9 @@ import streamlit as st
 from google import genai
 from google.genai import types
 
+import prompts
+import core
+
 # Constants
 MODEL_NAME = "gemini-3.5-flash"
 PAGE_TITLE = "DeadlineSnap"
@@ -27,6 +30,7 @@ def get_gemini_client() -> genai.Client:
     """Get cached Gemini client"""
     return genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
+
 # Secret validation
 def validate_secrets() -> bool:
     """Check if all required secrets are present"""
@@ -37,6 +41,7 @@ def validate_secrets() -> bool:
         st.error("Please add these to your .streamlit/secrets.toml file")
         st.stop()
     return True
+
 
 # Initialize session state
 def init_session_state():
@@ -55,6 +60,7 @@ def init_session_state():
         st.session_state.deadlines = []
     if "sending" not in st.session_state:
         st.session_state.sending = False
+
 
 # Onboarding form
 def render_onboarding():
@@ -75,11 +81,10 @@ def render_onboarding():
 
             # Initialize chat
             client = get_gemini_client()
-            system_instruction = prompts.get_system_instruction(datetime.date.today())
-            chat = client.chats.create(
-                model=MODEL_NAME,
-                config=types.GenerateContentConfig(system_instruction=system_instruction)
-            )
+            today_str = datetime.date.today().strftime('%Y-%m-%d')
+            system_prompt = prompts.build_system_prompt(datetime.date.today())
+            config = types.GenerateContentConfig(system_instruction=system_prompt)
+            chat = client.chats.create(model=MODEL_NAME, config=config)
 
             # Store in session state
             st.session_state.onboarded = True
@@ -92,6 +97,7 @@ def render_onboarding():
             st.session_state.deadlines = []
             st.rerun()
 
+
 # Chat UI helpers
 def render_message(message: Dict[str, Any]):
     """Render a single message"""
@@ -103,9 +109,11 @@ def render_message(message: Dict[str, Any]):
             if message.get("text"):
                 st.write(message["text"])
 
+
 def add_message(role: str, kind: str, content: Any):
     """Add a message to the chat"""
     st.session_state.messages.append({"role": role, "kind": kind, "content": content})
+
 
 # Ask Gemini
 def ask_gemini(parts: List[types.Part]) -> str:
@@ -117,6 +125,7 @@ def ask_gemini(parts: List[types.Part]) -> str:
     except Exception as e:
         return f"Sorry, I encountered an error: {str(e)}. Please try again."
 
+
 # Process uploaded image
 def process_image(uploaded_file) -> Optional[types.Part]:
     """Process uploaded image into Gemini Part"""
@@ -127,6 +136,7 @@ def process_image(uploaded_file) -> Optional[types.Part]:
             mime_type=uploaded_file.type
         )
     return None
+
 
 # Extract deadlines from conversation
 def extract_deadlines() -> List[Dict[str, Any]]:
@@ -140,6 +150,7 @@ def extract_deadlines() -> List[Dict[str, Any]]:
     except Exception as e:
         st.error(f"Error extracting deadlines: {str(e)}")
         return []
+
 
 # Send email
 def send_email(to_address: str, subject: str, body: str, ics_bytes: bytes) -> Tuple[bool, str]:
@@ -166,6 +177,7 @@ def send_email(to_address: str, subject: str, body: str, ics_bytes: bytes) -> Tu
         return True, "Email sent successfully"
     except Exception as e:
         return False, f"Failed to send email: {str(e)}"
+
 
 # Build digest
 def build_digest(deadlines: List[Dict[str, Any]], today: datetime.date) -> str:
@@ -209,6 +221,7 @@ def build_digest(deadlines: List[Dict[str, Any]], today: datetime.date) -> str:
 
     return "\n".join(lines)
 
+
 # Main app
 def main():
     """Main app function"""
@@ -221,15 +234,70 @@ def main():
         st.title(f"{PAGE_TITLE} {PAGE_ICON}")
     with col2:
         if len(st.session_state.messages) > 2:
-            if st.button("📧 Email my deadlines", type="primary"):
-                if not st.session_state.sending:
-                    st.session_state.sending = True
-                    st.rerun()
+            btn_disabled = st.session_state.get("sending", False)
+            if st.button("📧 Email my deadlines", type="primary", disabled=btn_disabled):
+                st.session_state.sending = True
+                st.rerun()
+
+    # Handle email sending
+    if st.session_state.get("sending"):
+        deadlines = extract_deadlines()
+        today = datetime.date.today()
+
+        if not deadlines:
+            st.info("I couldn't find any dated deadlines in this chat yet - try a clearer photo or type them in.")
+            st.session_state.sending = False
+            st.rerun()
+
+        # Sort deadlines
+        deadlines.sort(key=lambda d: d.get('date', '9999-12-31'))
+
+        # Build digest
+        digest = build_digest(deadlines, today)
+
+        # Build .ics file
+        ics_bytes = core.build_ics(deadlines)
+
+        # Show preview
+        with st.expander("📧 Email Preview"):
+            st.write(digest)
+
+        # Send email
+        success, message = send_email(
+            st.session_state.email,
+            f"📅 Your {len(deadlines)} deadlines - DeadlineSnap",
+            digest,
+            ics_bytes
+        )
+
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+            st.info("You can still download the calendar file:")
+
+        st.download_button(
+            label="📅 Download Calendar (.ics)",
+            data=ics_bytes,
+            file_name="deadlines.ics",
+            mime="text/calendar"
+        )
+
+        # Also offer CSV download
+        csv_data = core.to_csv(deadlines)
+        st.download_button(
+            label="📊 Download CSV",
+            data=csv_data,
+            file_name="deadlines.csv",
+            mime="text/csv"
+        )
+
+        st.session_state.sending = False
 
     # Sidebar
     with st.sidebar:
         st.caption(f"Logged in as: {st.session_state.name}")
-        st.caption(f"Email: {st.session_state.email}")
+        st.caption(f"Email to: {st.session_state.email}")
 
         st.subheader("How it works")
         st.write("1. Upload a photo of your syllabus/timetable")
@@ -258,95 +326,45 @@ def main():
     for msg in st.session_state.messages[1:]:
         render_message(msg)
 
-    # Chat input
+    # Chat input with image support
     user_input = st.chat_input("Ask about deadlines or upload an image", accept_file=True, file_type=["jpg", "jpeg", "png"])
 
     if user_input:
-        # Add user message
-        add_message("user", "text", user_input)
-        render_message({"role": "user", "kind": "text", "content": user_input})
-
-        # Prepare parts for Gemini
+        # Check what type user_input is (text or uploaded file)
         parts = []
 
-        # Add text
-        parts.append(types.Part.from_text(text=user_input))
+        if hasattr(user_input, 'text') and user_input.text:
+            # Text input
+            parts.append(types.Part.from_text(text=user_input.text))
+            add_message("user", "text", user_input.text)
+            render_message({"role": "user", "kind": "text", "content": user_input.text})
+        elif hasattr(user_input, 'type'):
+            # Image input
+            bytes_data = user_input.getvalue()
+            photo_part = types.Part.from_bytes(data=bytes_data, mime_type=user_input.type)
+            parts.append(photo_part)
+            parts.append(types.Part.from_text(text="List every deadline and date you can find in this image."))
+            add_message("user", "image", bytes_data)
+            render_message({"role": "user", "kind": "image", "content": bytes_data})
+        else:
+            # Fallback: treat as text
+            parts.append(types.Part.from_text(text=str(user_input)))
+            add_message("user", "text", str(user_input))
+            render_message({"role": "user", "kind": "text", "content": str(user_input)})
 
-        # Process image if uploaded
-        image_part = None
-        if hasattr(st.session_state, '_uploaded_file'):
-            image_part = process_image(st.session_state._uploaded_file)
-            if image_part:
-                parts.append(image_part)
-                # Add the instruction for images
-                parts.append(types.Part.from_text(text="List every deadline and date you can find in this image."))
+        # Get Gemini response
+        if parts:
+            response = ask_gemini(parts)
+            add_message("assistant", "text", response)
+            render_message({"role": "assistant", "kind": "text", "content": response})
 
-        # Get response
-        response = ask_gemini(parts)
-
-        # Add response
-        add_message("assistant", "text", response)
-        render_message({"role": "assistant", "kind": "text", "content": response})
-
-        # Extract deadlines if image was uploaded
-        if image_part:
+            # Extract deadlines from the conversation
             extracted = extract_deadlines()
             if extracted:
                 st.session_state.deadlines = core.merge_deadlines(st.session_state.deadlines, extracted)
 
-        # Clear uploaded file
-        if hasattr(st.session_state, '_uploaded_file'):
-            del st.session_state._uploaded_file
-
         st.rerun()
 
-    # Handle file upload
-    uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"], key="file_uploader")
-    if uploaded_file:
-        st.session_state._uploaded_file = uploaded_file
-        st.rerun()
-
-# Handle email sending
-if st.session_state.sending:
-    deadlines = extract_deadlines()
-    today = datetime.date.today()
-
-    if not deadlines:
-        st.info("I couldn't find any dated deadlines in this chat yet - try a clearer photo or type them in.")
-        st.session_state.sending = False
-        st.rerun()
-
-    # Sort deadlines
-    deadlines.sort(key=lambda d: d.get('date', '9999-12-31'))
-
-    # Build digest
-    digest = build_digest(deadlines, today)
-
-    # Build .ics file
-    ics_bytes = core.build_ics(deadlines)
-
-    # Show preview
-    with st.expander("📧 Email Preview"):
-        st.write(digest)
-
-    # Send email
-    success, message = send_email(st.session_state.email, f"📅 Your {len(deadlines)} deadlines", digest, ics_bytes)
-
-    if success:
-        st.success(message)
-    else:
-        st.error(message)
-        st.info("You can still download the calendar file:")
-        st.download_button(
-            label="📅 Download Calendar (.ics)",
-            data=ics_bytes,
-            file_name="deadlines.ics",
-            mime="text/calendar"
-        )
-
-    st.session_state.sending = False
 
 if __name__ == "__main__":
-    import prompts
-    import core
     main()
